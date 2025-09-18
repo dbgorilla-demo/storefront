@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Storefront — operations console</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --edge: #262b36; --ink: #e6e9ef;
+    --muted: #9aa4b2; --ok: #34d399; --warn: #fbbf24; --crit: #f87171;
+    --accent: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--ink); }
+  header { padding: 20px 28px; border-bottom: 1px solid var(--edge);
+           display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  nav { display: flex; gap: 4px; padding: 0 28px; border-bottom: 1px solid var(--edge); background: #14171e; }
+  nav button { font: inherit; background: none; border: none; color: var(--muted); padding: 12px 16px;
+               cursor: pointer; border-bottom: 2px solid transparent; }
+  nav button.active { color: var(--ink); border-bottom-color: var(--accent); }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 28px 60px; }
+  .tab { display: none; } .tab.active { display: block; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 8px; }
+  .card { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 14px 16px; }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .card .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+  .card .value small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .statuslight { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  .s-healthy { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .s-degraded { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  .s-critical { background: var(--crit); box-shadow: 0 0 10px var(--crit); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .4; } }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 28px 0 12px; }
+  .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button.act { font: inherit; border: 1px solid var(--edge); background: #1f2430; color: var(--ink);
+           padding: 12px 14px; border-radius: 8px; cursor: pointer; text-align: left; transition: .12s; }
+  button.act:hover { border-color: var(--accent); }
+  button.act:disabled { opacity: .5; cursor: default; }
+  button.act .bt { font-weight: 600; display: block; }
+  button.act .bd { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  button.danger { border-color: #3a2226; background: #241417; }
+  button.danger:hover { border-color: var(--crit); }
+  button.heal { border-color: #17352a; background: #0f2019; grid-column: 1 / -1; text-align: center; }
+  button.heal:hover { border-color: var(--ok); }
+  button.heal .bt { color: var(--ok); }
+  #log { background: #0b0d11; border: 1px solid var(--edge); border-radius: 8px; padding: 12px;
+         font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+         height: 130px; overflow-y: auto; color: var(--muted); }
+  #log div { padding: 1px 0; } #log .inj { color: var(--warn); } #log .heal { color: var(--ok); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase;
+       letter-spacing: .04em; padding: 8px 10px; border-bottom: 1px solid var(--edge); }
+  td { padding: 8px 10px; border-bottom: 1px solid #1e222b; vertical-align: top; }
+  td.sql { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #cdd3dd;
+           max-width: 460px; white-space: pre-wrap; word-break: break-word; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 20px; white-space: nowrap; }
+  .b-issue { background: #3a2226; color: #fca5a5; border: 1px solid #5b2b30; }
+  .b-warn { background: #3a2f14; color: #fcd34d; }
+  .b-bad { background: #3a2226; color: #fca5a5; }
+  .b-normal { background: #1f2430; color: var(--muted); }
+  .empty { color: var(--muted); padding: 24px 10px; text-align: center; }
+  .connbars { display: flex; flex-direction: column; gap: 8px; }
+  .connrow { display: grid; grid-template-columns: 190px 1fr 48px; align-items: center; gap: 10px; }
+  .connrow .st { color: var(--muted); font-size: 13px; }
+  .connrow .track { background: #0b0d11; border-radius: 5px; height: 18px; overflow: hidden; }
+  .connrow .fill { height: 100%; border-radius: 5px; transition: width .4s ease; }
+  .connrow .ct { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+  .f-active { background: var(--accent); }
+  .f-iit { background: var(--crit); }        /* idle in transaction — the dangerous one */
+  .f-idle { background: #3a4150; }
+  .f-other { background: var(--warn); }
+  .feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .feature { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; }
+  .feature .top { display: flex; align-items: center; gap: 12px; }
+  .feature .ico { font-size: 26px; line-height: 1; }
+  .feature .fname { font-size: 16px; font-weight: 600; }
+  .feature .tag { color: var(--muted); font-size: 13px; margin: 8px 0 12px; flex: 1; }
+  .feature .cause { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--crit);
+    background: #241417; border: 1px solid #3a2226; border-radius: 20px; padding: 3px 10px; margin-bottom: 12px; align-self: flex-start; }
+  .feature .cause::before { content: "\26A0"; }   /* warning triangle */
+  .feature .ship { font: inherit; font-weight: 600; border: 1px solid var(--edge); background: #1f2430; color: var(--ink);
+    padding: 9px 14px; border-radius: 8px; cursor: pointer; transition: .12s; }
+  .feature .ship:hover { border-color: var(--accent); }
+  .feature .ship.live { background: #0f2019; border-color: var(--ok); color: var(--ok); }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 14px; }
+  .foot { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  code { color: #cdd3dd; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Storefront</h1>
+    <div class="sub">Operations console · order + checkout backend</div>
+  </div>
+  <div class="sub"><span id="light" class="statuslight s-healthy"></span><span id="status">healthy</span></div>
+</header>
+<nav>
+  <button data-tab="storefront" class="active">Storefront</button>
+  <button data-tab="dashboard">Dashboard</button>
+  <button data-tab="queries">Live Queries</button>
+  <button data-tab="workload">Workload</button>
+  <button data-tab="alerts">Alerts</button>
+</nav>
+<main>
+  <!-- STOREFRONT (the veneer) -->
+  <section class="tab active" id="tab-storefront">
+    <div class="hint">Our storefront's feature roadmap. Ship a feature to see it go live —
+       and watch what each one does to the database on the other tabs and in DBGorilla.
+       <button class="act" style="display:inline-block;padding:4px 10px" id="restorefeatures">Roll back all features</button></div>
+    <div id="feature-grid" class="feature-grid"><div class="empty">loading…</div></div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section class="tab" id="tab-dashboard">
+    <div class="grid">
+      <div class="card"><div class="label">Connections</div><div class="value" id="conns">–</div></div>
+      <div class="card"><div class="label">Active queries</div><div class="value" id="active">–</div></div>
+      <div class="card"><div class="label">Blocked sessions</div><div class="value" id="blocked">–</div></div>
+      <div class="card"><div class="label">Longest query</div><div class="value" id="longest">–</div></div>
+      <div class="card"><div class="label">Dead tuples</div><div class="value" id="dead">–</div></div>
+      <div class="card"><div class="label">Database size</div><div class="value" id="size">–</div></div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;">
+      <div class="card"><div class="label">Throughput (this node)</div><div class="value" id="traffic">–</div></div>
+      <div class="card"><div class="label">Order-history index</div><div class="value" id="hotindex">–</div></div>
+    </div>
+
+    <h2>Connections by state</h2>
+    <div class="card"><div id="connbars" class="connbars"><div class="empty">loading…</div></div></div>
+
+    <h2>Operational controls</h2>
+    <div class="hint">Maintenance actions against the storefront database. Use with care on a live system.</div>
+    <div class="buttons">
+      <button class="act danger" data-fault="missing_index">
+        <span class="bt">Drop order-history index</span>
+        <span class="bd">Removes ix_orders_customer — customer lookups revert to sequential scans.</span></button>
+      <button class="act danger" data-fault="lock_storm">
+        <span class="bt">Hold inventory locks</span>
+        <span class="bd">Long transaction locks inventory rows; concurrent checkouts queue.</span></button>
+      <button class="act danger" data-fault="connection_flood">
+        <span class="bt">Open background connections</span>
+        <span class="bd">Idle-in-transaction connections consume the pool.</span></button>
+      <button class="act danger" data-fault="runaway_query">
+        <span class="bt">Run analytics backfill</span>
+        <span class="bd">Large unbounded joins; heavy CPU until they finish.</span></button>
+      <button class="act danger" data-fault="bloat">
+        <span class="bt">Disable autovacuum + churn</span>
+        <span class="bd">Rapid insert/delete on page_views with autovacuum off.</span></button>
+      <button class="act heal" data-heal="1"><span class="bt">Restore normal operation</span></button>
+    </div>
+
+    <h2>Event log</h2>
+    <div id="log"></div>
+  </section>
+
+  <!-- LIVE QUERIES -->
+  <section class="tab" id="tab-queries">
+    <div class="hint">Backends currently executing a statement or holding a transaction open
+       (<code>pg_stat_activity</code>). Refreshes every 2s.</div>
+    <table>
+      <thead><tr><th>PID</th><th>State</th><th class="num">Duration</th><th>Wait</th><th>Query</th><th>Flag</th></tr></thead>
+      <tbody id="activity-body"><tr><td colspan="6" class="empty">loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <!-- WORKLOAD -->
+  <section class="tab" id="tab-workload">
+    <div class="hint">Storefront queries ranked by total execution time since stats were last reset
+       (<code>pg_stat_statements</code>). Flagged rows exhibit a known anti-pattern.</div>
+    <table>
+      <thead><tr><th>Query</th><th class="num">Calls</th><th class="num">Total ms</th><th class="num">Mean ms</th><th class="num">Rows</th><th>Flag</th></tr></thead>
+      <tbody id="workload-body"><tr><td colspan="6" class="empty">loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <!-- ALERTS -->
+  <section class="tab" id="tab-alerts">
+    <div class="hint">DBGorilla's default per-database alerts. Trigger one to drive its
+       metric across the threshold; alerts have a 1-minute pending window, so give it
+       ~2 minutes to fire in DBGorilla. <button class="act" style="display:inline-block;padding:4px 10px" id="stopalerts">Stop all campaigns</button></div>
+    <table>
+      <thead><tr><th>Alert</th><th>Severity</th><th>Condition</th><th>Status</th><th></th></tr></thead>
+      <tbody id="alerts-body"><tr><td colspan="5" class="empty">loading…</td></tr></tbody>
+    </table>
+    <h2>Platform alerts (not app-triggerable)</h2>
+    <div class="hint">These default alerts match DBGorilla backend log patterns, not database
+       metrics — they can't be induced from this app. Listed for completeness.</div>
+    <div id="logalerts" class="hint"></div>
+  </section>
+
+  <div class="foot">Database <code>storefront</code> on <code>storefront-pg</code> · monitored by DBGorilla.</div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let activeTab = "storefront";
+
+document.querySelectorAll("nav button").forEach(b =>
+  b.addEventListener("click", () => {
+    activeTab = b.dataset.tab;
+    document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
+    document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.id === "tab-" + activeTab));
+    poll();
+  }));
+
+function logLine(msg, cls) {
+  const d = document.createElement("div");
+  d.textContent = new Date().toLocaleTimeString() + "  " + msg;
+  if (cls) d.className = cls;
+  $("log").prepend(d);
+}
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+async function refreshHealth() {
+  try {
+    const h = await (await fetch("/api/health")).json();
+    $("status").textContent = h.status;
+    $("light").className = "statuslight s-" + h.status;
+    $("conns").innerHTML = h.connections_used + " <small>/ " + h.connections_max + " (" + h.connection_pct + "%)</small>";
+    $("active").textContent = h.active_queries;
+    $("blocked").textContent = h.blocked_count;
+    $("longest").innerHTML = h.longest_query_seconds + " <small>s</small>";
+    $("dead").innerHTML = h.dead_tuple_pct + " <small>% dead</small>";
+    $("size").innerHTML = h.database_mb + " <small>MB</small>";
+    $("hotindex").textContent = h.hot_index_present ? "present" : "MISSING";
+    $("traffic").innerHTML = h.traffic_ok + " <small>ok / " + h.traffic_errors + " err</small>";
+  } catch (e) {}
+}
+async function refreshActivity() {
+  try {
+    const d = await (await fetch("/api/activity")).json();
+    const b = $("activity-body");
+    if (!d.sessions.length) { b.innerHTML = '<tr><td colspan="6" class="empty">No active sessions right now.</td></tr>'; return; }
+    b.innerHTML = d.sessions.map(s => `<tr>
+      <td class="num">${s.pid}</td>
+      <td>${esc(s.state)}</td>
+      <td class="num">${s.duration_seconds}s</td>
+      <td>${s.wait ? esc(s.wait) : "—"}</td>
+      <td class="sql">${esc(s.query)}</td>
+      <td>${s.issue ? `<span class="badge b-issue">${esc(s.issue)}</span>` : `<span class="badge b-${s.severity}">${s.severity}</span>`}</td>
+    </tr>`).join("");
+  } catch (e) {}
+}
+async function refreshWorkload() {
+  try {
+    const d = await (await fetch("/api/workload")).json();
+    const b = $("workload-body");
+    if (!d.statements.length) { b.innerHTML = '<tr><td colspan="6" class="empty">No workload recorded yet.</td></tr>'; return; }
+    b.innerHTML = d.statements.map(s => `<tr>
+      <td class="sql">${esc(s.query)}</td>
+      <td class="num">${s.calls.toLocaleString()}</td>
+      <td class="num">${s.total_ms.toLocaleString()}</td>
+      <td class="num">${s.mean_ms}</td>
+      <td class="num">${s.rows.toLocaleString()}</td>
+      <td>${s.issue ? `<span class="badge b-issue">${esc(s.issue)}</span>` : ""}</td>
+    </tr>`).join("");
+  } catch (e) {}
+}
+function connClass(state) {
+  if (state === "active") return "f-active";
+  if (state.startsWith("idle in transaction")) return "f-iit";
+  if (state === "idle") return "f-idle";
+  return "f-other";
+}
+async function refreshConnections() {
+  try {
+    const d = await (await fetch("/api/connections")).json();
+    const el = $("connbars");
+    if (!d.states.length) { el.innerHTML = '<div class="empty">No connections.</div>'; return; }
+    const max = Math.max(1, ...d.states.map(s => s.count));
+    el.innerHTML = d.states.map(s => `<div class="connrow">
+      <span class="st">${esc(s.state)}</span>
+      <div class="track"><div class="fill ${connClass(s.state)}" style="width:${Math.round(100 * s.count / max)}%"></div></div>
+      <span class="ct">${s.count}</span>
+    </div>`).join("");
+  } catch (e) {}
+}
+async function refreshAlerts() {
+  try {
+    const d = await (await fetch("/api/alerts")).json();
+    const b = $("alerts-body");
+    b.innerHTML = d.alerts.map(a => {
+      const running = a.remaining > 0;
+      const status = running
+        ? `<span class="badge b-warn">firing… ${a.remaining}s left</span>`
+        : (a.triggerable ? `<span class="badge b-normal">idle</span>` : `<span class="badge b-issue">unreachable</span>`);
+      const btn = a.triggerable
+        ? `<button class="act" style="padding:6px 12px" data-alert="${a.id}" ${running ? "disabled" : ""}>Trigger</button>`
+        : `<button class="act" style="padding:6px 12px;opacity:.4" disabled>N/A</button>`;
+      return `<tr>
+        <td><b>${esc(a.title)}</b><div class="hint" style="margin:2px 0 0">${esc(a.id)}${a.note ? " — " + esc(a.note) : ""}</div></td>
+        <td><span class="badge b-${a.severity === "critical" ? "bad" : "warn"}">${a.severity}</span></td>
+        <td class="sql">${esc(a.condition)}</td>
+        <td>${status}</td>
+        <td>${btn}</td>
+      </tr>`;
+    }).join("");
+    b.querySelectorAll("button[data-alert]").forEach(x =>
+      x.addEventListener("click", () => triggerAlert(x.dataset.alert)));
+    $("logalerts").textContent = d.log_alerts.join(" · ");
+  } catch (e) {}
+}
+async function triggerAlert(id) {
+  try {
+    const r = await (await fetch("/api/alerts/" + id, { method: "POST" })).json();
+    logLine("alert " + id + ": " + r.detail, "inj");
+  } catch (e) { logLine("alert trigger failed: " + e, "inj"); }
+  refreshAlerts();
+}
+async function refreshFeatures() {
+  try {
+    const d = await (await fetch("/api/features")).json();
+    const g = $("feature-grid");
+    g.innerHTML = d.features.map(f => {
+      const live = f.remaining > 0;
+      return `<div class="feature">
+        <div class="top"><span class="ico">${f.icon}</span><span class="fname">${esc(f.name)}</span></div>
+        <div class="tag">${esc(f.tagline)}</div>
+        <div class="cause">${esc(f.problem)}</div>
+        <button class="ship ${live ? "live" : ""}" data-feature="${f.id}">${live ? "Live · running" : "Ship it"}</button>
+      </div>`;
+    }).join("");
+    g.querySelectorAll("button[data-feature]").forEach(x =>
+      x.addEventListener("click", () => enableFeature(x.dataset.feature)));
+  } catch (e) {}
+}
+async function enableFeature(id) {
+  try {
+    const r = await (await fetch("/api/features/" + id, { method: "POST" })).json();
+    logLine("shipped " + r.name + " → " + r.problem, "inj");
+  } catch (e) { logLine("ship failed: " + e, "inj"); }
+  refreshFeatures();
+}
+function poll() {
+  refreshHealth();
+  if (activeTab === "storefront") refreshFeatures();
+  if (activeTab === "dashboard") refreshConnections();
+  if (activeTab === "queries") refreshActivity();
+  if (activeTab === "workload") refreshWorkload();
+  if (activeTab === "alerts") refreshAlerts();
+}
+
+async function fire(url) {
+  document.querySelectorAll("button.act").forEach(b => b.disabled = true);
+  try {
+    const data = await (await fetch(url, { method: "POST" })).json();
+    (data.results || [data]).forEach(x => logLine(x.fault + ": " + x.detail, x.action === "healed" ? "heal" : "inj"));
+  } catch (e) { logLine("request failed: " + e, "inj"); }
+  finally { document.querySelectorAll("button.act").forEach(b => b.disabled = false); poll(); }
+}
+document.querySelectorAll("button[data-fault]").forEach(b =>
+  b.addEventListener("click", () => fire("/api/fault/" + b.dataset.fault)));
+document.querySelector("button[data-heal]").addEventListener("click", () => fire("/api/heal"));
+$("stopalerts").addEventListener("click", async () => {
+  await fetch("/api/alerts-stop", { method: "POST" });
+  logLine("alert campaigns stopped", "heal"); refreshAlerts();
+});
+$("restorefeatures").addEventListener("click", async () => {
+  await fetch("/api/features-restore", { method: "POST" });
+  logLine("all features rolled back — database restored", "heal"); refreshFeatures();
+});
+
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>
