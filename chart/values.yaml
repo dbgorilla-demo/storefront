@@ -1,0 +1,89 @@
+# aks-storefront-prod, monitored by the release-branch DBGorilla at
+# values-aws.yaml on top; see docs/OPERATIONS.md -> Environments.
+
+cluster:
+  name: storefront-pg
+  instances: 1
+  # Full-extension platform image (hypopg + pg_stat_statements + plpgsql +
+  # postgis). Pin by digest when promoting.
+  image: crstorefront.azurecr.io/cnpg-pg:16-postgis-latest
+  database: storefront
+  owner: storefront_app
+  collectorRole: storefront_collector
+  storageSize: 5Gi
+  storageClass: ""          # cluster default
+  monitoring:
+    enablePodMonitor: false
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits:   { cpu: "1",  memory: 1Gi }
+
+  # Extensions preloaded at server start. pg_stat_statements is required for
+  # workload collection; adding others (auto_explain, etc.) is a one-line change.
+  sharedPreloadLibraries:
+    - pg_stat_statements
+
+  # --- Server tuning as code ---------------------------------------------
+  # Every postgresql.conf parameter, one editable line. Change a value here and
+  # `helm upgrade`; CNPG reconciles it (SIGHUP reload for most, controlled
+  # rolling restart for shared_buffers / max_connections).
+  #
+  postgresParameters:
+    max_connections: "50"
+    shared_buffers: "128MB"
+    effective_cache_size: "128MB"
+    work_mem: "64kB"
+    maintenance_work_mem: "64MB"
+    random_page_cost: "4"
+    autovacuum_vacuum_scale_factor: "0.4"
+    autovacuum_analyze_scale_factor: "0.2"
+    log_min_duration_statement: "-1"
+    track_functions: "pl"
+    pg_stat_statements.max: "10000"
+    pg_stat_statements.track: "all"
+
+# Application role credentials; managed by the platform team.
+credentials:
+  appPassword: storefront
+  collectorPassword: storefront
+
+app:
+  # Toggle the web app + migration Job independently of the database, so the
+  # CNPG cluster can be brought up and registered before the app image exists.
+  enabled: true
+  image:
+    repository: crstorefront.azurecr.io/storefront
+    tag: "0.5.3"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  trafficQps: 8            # constant queries/sec from the app pod
+  poolMin: 2
+  poolMax: 10
+  # Chaos dials. flood is kept under max_connections (50) minus CNPG's reserved
+  # superuser slots, so it saturates app connections without wedging the
+  # operator's health probes.
+  chaos:
+    lockProducts: 25
+    floodConnections: 40
+    runawayCount: 4
+    churnBatches: 40
+    churnRows: 5000
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
+
+# node_exporter (:9100) + postgres_exporter (:9187). DBGorilla scrapes these for
+# host metrics (node_*) and PostgreSQL gauges (pg_*) once their URLs are on the
+# connected database's exporter registry.
+exporters:
+  enabled: true
+  nodeExporter:
+    image: quay.io/prometheus/node-exporter:v1.8.2
+  postgresExporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+
+# Optional HTTP exposure of the button UI. Off by default — reach it with
+ingress:
+  enabled: false
+  host: store.furiousengineering.com
+  className: nginx

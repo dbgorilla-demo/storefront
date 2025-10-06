@@ -1,0 +1,119 @@
+{{- if .Values.exporters.enabled }}
+{{/*
+node_exporter (:9100) + postgres_exporter (:9187) for storefront-pg.
+
+DBGorilla's `scrape_external_exporters` task pulls host metrics (node_*) and
+PostgreSQL metrics (pg_*) from these endpoints every 60s, once their URLs are
+registered on the connected database's dbg_metadata.external_exporters. These
+are the "node exporter" and "postgres exporter" the platform needs — they cover the
+host CPU/mem/disk + pg connection/lock/replication gauges that direct SQL
+collection does not.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.cluster.name }}-node-exporter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "storefront.labels" . | nindent 4 }}
+    app.kubernetes.io/component: node-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: storefront
+      app.kubernetes.io/component: node-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: storefront
+        app.kubernetes.io/component: node-exporter
+    spec:
+      # Real host metrics: read the node's /proc, /sys, and rootfs read-only.
+      hostPID: true
+      containers:
+        - name: node-exporter
+          image: {{ .Values.exporters.nodeExporter.image }}
+          args:
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            - --path.rootfs=/host/root
+            - --web.listen-address=:9100
+          ports:
+            - { name: metrics, containerPort: 9100 }
+          volumeMounts:
+            - { name: proc, mountPath: /host/proc, readOnly: true }
+            - { name: sys,  mountPath: /host/sys,  readOnly: true }
+            - { name: root, mountPath: /host/root, readOnly: true, mountPropagation: HostToContainer }
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits:   { cpu: 200m, memory: 128Mi }
+      volumes:
+        - { name: proc, hostPath: { path: /proc } }
+        - { name: sys,  hostPath: { path: /sys } }
+        - { name: root, hostPath: { path: / } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.cluster.name }}-node-exporter
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "storefront.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: storefront
+    app.kubernetes.io/component: node-exporter
+  ports:
+    - { name: metrics, port: 9100, targetPort: metrics }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.cluster.name }}-pg-exporter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "storefront.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pg-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: storefront
+      app.kubernetes.io/component: pg-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: storefront
+        app.kubernetes.io/component: pg-exporter
+    spec:
+      containers:
+        - name: pg-exporter
+          image: {{ .Values.exporters.postgresExporter.image }}
+          env:
+            - name: DATA_SOURCE_URI
+              value: {{ .Values.cluster.name }}-rw:5432/{{ .Values.cluster.database }}?sslmode=require
+            - name: DATA_SOURCE_USER
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.cluster.name }}-app, key: username }
+            - name: DATA_SOURCE_PASS
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.cluster.name }}-app, key: password }
+          ports:
+            - { name: metrics, containerPort: 9187 }
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits:   { cpu: 200m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.cluster.name }}-pg-exporter
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "storefront.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: storefront
+    app.kubernetes.io/component: pg-exporter
+  ports:
+    - { name: metrics, port: 9187, targetPort: metrics }
+{{- end }}

@@ -1,0 +1,45 @@
+{{/*
+Schema migrations as a Helm hook. Runs before the app on install/upgrade,
+waits for CNPG's primary to accept connections, then `alembic upgrade head`.
+DATABASE_URL is assembled from the CNPG-issued app secret; no DSN is hard-coded.
+*/}}
+{{- if .Values.app.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.cluster.name }}-migrate
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "storefront.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels: {{- include "storefront.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          command: ["sh", "scripts/migrate.sh"]
+          env:
+            - name: PGHOST
+              value: {{ .Values.cluster.name }}-rw
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.cluster.name }}-app, key: username }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.cluster.name }}-app, key: password }
+            - name: DATABASE_URL
+              value: >-
+                postgresql://$(PGUSER):$(PGPASSWORD)@{{ .Values.cluster.name }}-rw:5432/{{ .Values.cluster.database }}
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+{{- end }}

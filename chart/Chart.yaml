@@ -1,0 +1,9 @@
+apiVersion: v2
+name: storefront
+description: >-
+  A deliberately imperfect e-commerce "storefront" — constant realistic traffic,
+  naive query features, a mis-tuned Postgres, and buttons to inject real faults.
+  Its whole purpose is to give DBGorilla something worth diagnosing.
+type: application
+version: 0.5.2
+appVersion: "0.5.2"

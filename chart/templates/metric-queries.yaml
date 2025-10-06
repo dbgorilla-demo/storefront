@@ -1,0 +1,39 @@
+{{/*
+Custom metrics for CNPG's built-in exporter (:9187). These ride alongside the
+default cnpg_* set and surface storefront-specific health:
+connection saturation, dead-tuple bloat, and whether the hot index still exists.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.cluster.name }}-metric-queries
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "storefront.labels" . | nindent 4 }}
+data:
+  queries.yaml: |
+    storefront_bloat:
+      query: >-
+        SELECT schemaname, relname AS table_name,
+               n_dead_tup AS dead_tuples, n_live_tup AS live_tuples
+        FROM pg_stat_user_tables WHERE schemaname = 'storefront'
+      metrics:
+        - schemaname: { usage: LABEL, description: schema }
+        - table_name: { usage: LABEL, description: table }
+        - dead_tuples: { usage: GAUGE, description: dead tuples awaiting vacuum }
+        - live_tuples: { usage: GAUGE, description: live tuples }
+    storefront_connections:
+      query: >-
+        SELECT count(*) AS used,
+               current_setting('max_connections')::int AS max
+        FROM pg_stat_activity
+      metrics:
+        - used: { usage: GAUGE, description: connections in use }
+        - max:  { usage: GAUGE, description: max_connections ceiling }
+    storefront_hot_index:
+      query: >-
+        SELECT CASE WHEN EXISTS (
+                 SELECT 1 FROM pg_indexes
+                 WHERE schemaname='storefront' AND indexname='ix_orders_customer'
+               ) THEN 1 ELSE 0 END AS present
+      metrics:
+        - present: { usage: GAUGE, description: 1 if the hot index exists }
