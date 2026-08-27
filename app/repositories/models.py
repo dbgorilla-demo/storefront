@@ -62,10 +62,9 @@ class WorkloadSample:
 
 @dataclass(frozen=True)
 class ReservationStats:
-    """Live counters for the inventory-reservation drill: how many SERIALIZABLE
-    reservation transactions were attempted, how many committed, and how many
-    Postgres refused with a serialization failure (SQLSTATE 40001) and had to
-    be retried."""
+    """Live counters for the reservation flow: transactions attempted, committed,
+    and refused by Postgres with a serialization failure (SQLSTATE 40001) and
+    retried."""
 
     running: bool
     workers: int

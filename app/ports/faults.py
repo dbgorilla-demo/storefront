@@ -40,9 +40,8 @@ class FaultInjectionPort(Protocol):
 
     async def reclaim_bloat(self) -> None: ...
 
-    # --- reservation conflicts: concurrent SERIALIZABLE reservations whose
-    #     low-stock check scans the whole inventory table, so every reservation
-    #     conflicts with every other and Postgres aborts them (SQLSTATE 40001)
+    # --- reservations at load: concurrent checkout reservations, each in the
+    #     SERIALIZABLE transaction the reservation requires
     async def start_reservation_storm(
         self, workers: int, hot_products: int, hold_seconds: int
     ) -> int: ...
@@ -51,7 +50,7 @@ class FaultInjectionPort(Protocol):
 
     async def reservation_stats(self) -> ReservationStats: ...
 
-    # the fix: an index on the low-stock predicate narrows the predicate lock
+    # index for the deep-stock guard the reservation reads
     async def create_reservation_index(self) -> bool: ...
 
     async def drop_reservation_index(self) -> bool: ...

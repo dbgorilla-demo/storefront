@@ -37,9 +37,9 @@ _RESERVATION_INDEX_DDL = (
 )
 # A reservation first counts the lines that still carry deep stock (the
 # free-shipping promo is only offered while enough do), then adjusts one
-# product's stock. Without an index on quantity_available that count is a
-# scan of the whole inventory table.
-_DEEP_STOCK_THRESHOLD = 100
+# product's stock. "Deep" is the top percentile of stock levels at the time
+# the reservations start.
+_DEEP_STOCK_PERCENTILE = 0.99
 
 
 class PostgresFaultRepository:
@@ -57,6 +57,7 @@ class PostgresFaultRepository:
         self._reserve_stop = asyncio.Event()
         self._reserve_started: float = 0.0
         self._reserve_counts = {"attempts": 0, "commits": 0, "failures": 0}
+        self._deep_threshold = 0
 
     # ---- missing index ---------------------------------------------------
 
@@ -266,22 +267,26 @@ class PostgresFaultRepository:
     async def start_reservation_storm(
         self, workers: int, hot_products: int, hold_seconds: int
     ) -> int:
-        """Run `workers` concurrent SERIALIZABLE reservation transactions for
-        up to `hold_seconds`. Each one reads the deep-stock guard (a scan over
-        the whole inventory table when no index covers quantity_available)
-        and then updates one of `hot_products` low-stock products. Under
-        SERIALIZABLE a whole-table scan takes a predicate lock on the whole
-        table, so any two concurrent reservations conflict and one of them is
-        aborted with SQLSTATE 40001. The workers retry, as an application would.
-        With the index, the guard locks only the index pages holding deep-stock
-        rows, which the low-stock updates never touch — no conflict.
+        """Run `workers` concurrent reservation transactions for up to
+        `hold_seconds`: the checkout reservation flow (deep-stock guard, then
+        one product's stock adjusted) against `hot_products` low-stock
+        products, at the SERIALIZABLE isolation the reservation requires. A
+        transaction Postgres refuses to commit is counted and retried, as the
+        checkout does.
         """
         if any(not t.done() for t in self._reserve_tasks):
             return 0
         async with self._pool.connection() as conn:
             cur = await conn.execute(
+                "SELECT percentile_disc(%s) WITHIN GROUP (ORDER BY quantity_available) "
+                "FROM storefront.inventory",
+                (_DEEP_STOCK_PERCENTILE,),
+            )
+            row = await cur.fetchone()
+            self._deep_threshold = int(row[0] or 0)
+            cur = await conn.execute(
                 "SELECT product_id FROM storefront.inventory "
-                "WHERE quantity_available < 50 ORDER BY product_id LIMIT %s",
+                "ORDER BY quantity_available, product_id LIMIT %s",
                 (hot_products,),
             )
             hot_ids = [r[0] for r in await cur.fetchall()]
@@ -321,7 +326,7 @@ class PostgresFaultRepository:
                         await conn.execute(
                             "SELECT count(*) FROM storefront.inventory "
                             "WHERE quantity_available > %s",
-                            (_DEEP_STOCK_THRESHOLD,),
+                            (self._deep_threshold,),
                         )
                         await conn.execute(
                             "UPDATE storefront.inventory "
@@ -377,9 +382,9 @@ class PostgresFaultRepository:
     async def create_reservation_index(self) -> bool:
         import psycopg
 
-        # CONCURRENTLY cannot run inside a transaction, and never blocks the
-        # reservations we are trying to fix — so a dedicated autocommit
-        # connection, not one from the pool.
+        # CONCURRENTLY cannot run inside a transaction and does not block
+        # reservations while it builds — so a dedicated autocommit connection,
+        # not one from the pool.
         async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
             cur = await conn.execute(
                 "SELECT 1 FROM pg_indexes WHERE schemaname='storefront' AND indexname=%s",

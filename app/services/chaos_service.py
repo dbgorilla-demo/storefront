@@ -72,15 +72,13 @@ class ChaosService:
                 self._storm_workers, self._storm_hot_products, self._storm_seconds
             )
             return FaultResult(fault, "injected",
-                               f"Started {n} concurrent SERIALIZABLE reservation workers — "
-                               "each low-stock check scans the whole inventory table, so "
-                               "reservations conflict and Postgres aborts them (40001).")
+                               f"Started {n} concurrent reservation workers (SERIALIZABLE); "
+                               "refused transactions are counted and retried.")
         if fault == "reservation_index":
             created = await self._f.create_reservation_index()
             return FaultResult(fault, "fixed",
-                               "Created ix_inventory_quantity CONCURRENTLY — the low-stock "
-                               "check now uses the index, so its predicate lock covers a "
-                               "few index pages instead of the whole table."
+                               "Created ix_inventory_quantity CONCURRENTLY on "
+                               "inventory(quantity_available) and analyzed the table."
                                if created else "ix_inventory_quantity already exists.")
         raise ValueError(f"unknown fault: {fault}")
 
