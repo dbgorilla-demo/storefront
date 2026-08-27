@@ -123,6 +123,12 @@ async def api_heal() -> JSONResponse:
     return JSONResponse({"results": [r.__dict__ for r in results]})
 
 
+@app.get("/api/reservations")
+async def api_reservations() -> JSONResponse:
+    stats = await app.state.chaos.reservation_stats()
+    return JSONResponse(stats.__dict__)
+
+
 @app.get("/api/activity")
 async def api_activity() -> JSONResponse:
     sessions = await app.state.diagnostics.live_sessions()

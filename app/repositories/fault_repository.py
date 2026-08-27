@@ -10,8 +10,13 @@ no longer holds a handle to.
 from __future__ import annotations
 
 import asyncio
+import logging
+import random
+import time
 
 from psycopg_pool import AsyncConnectionPool
+
+from app.repositories.models import ReservationStats
 
 _HOT_INDEX = "ix_orders_customer"
 _HOT_INDEX_DDL = (
@@ -22,6 +27,19 @@ _HOT_INDEX_DDL = (
 _APP_IDLE = "dbg-demo-chaos-idle"
 _APP_RUNAWAY = "dbg-demo-chaos-runaway"
 _APP_LOCKER = "dbg-demo-chaos-locker"
+_APP_RESERVE = "dbg-demo-chaos-reserve"
+_log = logging.getLogger(__name__)
+
+_RESERVATION_INDEX = "ix_inventory_quantity"
+_RESERVATION_INDEX_DDL = (
+    "CREATE INDEX ix_inventory_quantity "
+    "ON storefront.inventory(quantity_available)"
+)
+# A reservation first counts the lines that still carry deep stock (the
+# free-shipping promo is only offered while enough do), then adjusts one
+# product's stock. Without an index on quantity_available that count is a
+# scan of the whole inventory table.
+_DEEP_STOCK_THRESHOLD = 100
 
 
 class PostgresFaultRepository:
@@ -35,6 +53,10 @@ class PostgresFaultRepository:
         self._idle_autoclose: asyncio.Task | None = None
         self._lock_task: asyncio.Task | None = None
         self._lock_stop = asyncio.Event()
+        self._reserve_tasks: list[asyncio.Task] = []
+        self._reserve_stop = asyncio.Event()
+        self._reserve_started: float = 0.0
+        self._reserve_counts = {"attempts": 0, "commits": 0, "failures": 0}
 
     # ---- missing index ---------------------------------------------------
 
@@ -238,6 +260,143 @@ class PostgresFaultRepository:
         async with self._pool.connection() as conn:
             await conn.set_autocommit(True)
             await conn.execute("VACUUM (ANALYZE) storefront.page_views")
+
+    # ---- reservation conflicts -------------------------------------------
+
+    async def start_reservation_storm(
+        self, workers: int, hot_products: int, hold_seconds: int
+    ) -> int:
+        """Run `workers` concurrent SERIALIZABLE reservation transactions for
+        up to `hold_seconds`. Each one reads the deep-stock guard (a scan over
+        the whole inventory table when no index covers quantity_available)
+        and then updates one of `hot_products` low-stock products. Under
+        SERIALIZABLE a whole-table scan takes a predicate lock on the whole
+        table, so any two concurrent reservations conflict and one of them is
+        aborted with SQLSTATE 40001. The workers retry, as an application would.
+        With the index, the guard locks only the index pages holding deep-stock
+        rows, which the low-stock updates never touch — no conflict.
+        """
+        if any(not t.done() for t in self._reserve_tasks):
+            return 0
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT product_id FROM storefront.inventory "
+                "WHERE quantity_available < 50 ORDER BY product_id LIMIT %s",
+                (hot_products,),
+            )
+            hot_ids = [r[0] for r in await cur.fetchall()]
+        if not hot_ids:
+            return 0
+        self._reserve_stop = asyncio.Event()
+        self._reserve_counts = {"attempts": 0, "commits": 0, "failures": 0}
+        self._reserve_started = time.monotonic()
+        self._reserve_tasks = [
+            asyncio.create_task(self._reserve_loop(i, hot_ids, hold_seconds))
+            for i in range(workers)
+        ]
+        return workers
+
+    async def _reserve_loop(self, worker: int, hot_ids: list[int], hold_seconds: int) -> None:
+        import psycopg
+        from psycopg import IsolationLevel
+        from psycopg.errors import SerializationFailure
+
+        try:
+            conn = await psycopg.AsyncConnection.connect(
+                self._dsn, application_name=_APP_RESERVE, autocommit=False
+            )
+            await conn.set_isolation_level(IsolationLevel.SERIALIZABLE)
+        except Exception:  # noqa: BLE001
+            _log.exception("reservation worker %d could not connect", worker)
+            return
+        deadline = time.monotonic() + hold_seconds
+        counts = self._reserve_counts
+        try:
+            while not self._reserve_stop.is_set() and time.monotonic() < deadline:
+                product_id = random.choice(hot_ids)
+                delta = 1 if (counts["attempts"] + worker) % 2 == 0 else -1
+                counts["attempts"] += 1
+                try:
+                    async with conn.transaction():
+                        await conn.execute(
+                            "SELECT count(*) FROM storefront.inventory "
+                            "WHERE quantity_available > %s",
+                            (_DEEP_STOCK_THRESHOLD,),
+                        )
+                        await conn.execute(
+                            "UPDATE storefront.inventory "
+                            "SET quantity_available = greatest(quantity_available + %s, 0), "
+                            "    updated_at = now() "
+                            "WHERE product_id = %s",
+                            (delta, product_id),
+                        )
+                    counts["commits"] += 1
+                except SerializationFailure:
+                    counts["failures"] += 1
+                except Exception:  # noqa: BLE001 — connection lost on heal, expected
+                    _log.exception("reservation worker %d stopped", worker)
+                    break
+                await asyncio.sleep(0.005)
+        finally:
+            try:
+                await conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    async def stop_reservation_storm(self) -> ReservationStats:
+        self._reserve_stop.set()
+        for t in self._reserve_tasks:
+            try:
+                await asyncio.wait_for(t, timeout=10)
+            except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+                t.cancel()
+        self._reserve_tasks = []
+        await self._terminate_by_appname(_APP_RESERVE)
+        return await self.reservation_stats()
+
+    async def reservation_stats(self) -> ReservationStats:
+        running = any(not t.done() for t in self._reserve_tasks)
+        elapsed = (time.monotonic() - self._reserve_started) if self._reserve_started else 0.0
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT 1 FROM pg_indexes WHERE schemaname='storefront' AND indexname=%s",
+                (_RESERVATION_INDEX,),
+            )
+            present = (await cur.fetchone()) is not None
+        c = self._reserve_counts
+        return ReservationStats(
+            running=running,
+            workers=sum(1 for t in self._reserve_tasks if not t.done()),
+            attempts=c["attempts"],
+            commits=c["commits"],
+            serialization_failures=c["failures"],
+            elapsed_seconds=round(elapsed, 1),
+            index_present=present,
+        )
+
+    async def create_reservation_index(self) -> bool:
+        import psycopg
+
+        # CONCURRENTLY cannot run inside a transaction, and never blocks the
+        # reservations we are trying to fix — so a dedicated autocommit
+        # connection, not one from the pool.
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            cur = await conn.execute(
+                "SELECT 1 FROM pg_indexes WHERE schemaname='storefront' AND indexname=%s",
+                (_RESERVATION_INDEX,),
+            )
+            if await cur.fetchone():
+                return False
+            await conn.execute(_RESERVATION_INDEX_DDL.replace("CREATE INDEX", "CREATE INDEX CONCURRENTLY"))
+            await conn.execute("ANALYZE storefront.inventory")
+        return True
+
+    async def drop_reservation_index(self) -> bool:
+        import psycopg
+
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            await conn.execute(f"DROP INDEX CONCURRENTLY IF EXISTS storefront.{_RESERVATION_INDEX}")
+        return True
 
     # ---- shared ----------------------------------------------------------
 

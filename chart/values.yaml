@@ -53,7 +53,7 @@ app:
   enabled: true
   image:
     repository: crstorefront.azurecr.io/storefront
-    tag: "0.5.3"
+    tag: "0.6.0"
     pullPolicy: IfNotPresent
   replicas: 1
   trafficQps: 8            # constant queries/sec from the app pod
@@ -68,6 +68,12 @@ app:
     runawayCount: 4
     churnBatches: 40
     churnRows: 5000
+    # Inventory reservations drill: concurrent SERIALIZABLE workers, how many
+    # products they contend on, and how long the drill runs before it stops
+    # itself. 8 workers on 50 products is enough to keep the conflict rate high.
+    stormWorkers: 8
+    stormHotProducts: 50
+    stormSeconds: 600
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits:   { cpu: 500m, memory: 256Mi }

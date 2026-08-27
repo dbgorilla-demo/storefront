@@ -12,7 +12,10 @@ from app.services.models import FaultResult
 
 # One entry per button. Keeping the catalog here (not in the web layer) keeps
 # the fault policy in the service.
-FAULTS = ("missing_index", "lock_storm", "connection_flood", "runaway_query", "bloat")
+FAULTS = (
+    "missing_index", "lock_storm", "connection_flood", "runaway_query", "bloat",
+    "reservation_storm", "reservation_index",
+)
 
 
 class ChaosService:
@@ -25,6 +28,9 @@ class ChaosService:
         runaway_count: int = 4,
         churn_batches: int = 40,
         churn_rows: int = 5000,
+        storm_workers: int = 8,
+        storm_hot_products: int = 50,
+        storm_seconds: int = 600,
     ) -> None:
         self._f = faults
         self._lock_products = lock_products
@@ -32,6 +38,9 @@ class ChaosService:
         self._runaway_count = runaway_count
         self._churn_batches = churn_batches
         self._churn_rows = churn_rows
+        self._storm_workers = storm_workers
+        self._storm_hot_products = storm_hot_products
+        self._storm_seconds = storm_seconds
 
     async def inject(self, fault: str) -> FaultResult:
         if fault == "missing_index":
@@ -58,7 +67,25 @@ class ChaosService:
             return FaultResult(fault, "injected",
                                f"Autovacuum off + churned {churned:,} page_views rows — "
                                "dead tuples accumulating.")
+        if fault == "reservation_storm":
+            n = await self._f.start_reservation_storm(
+                self._storm_workers, self._storm_hot_products, self._storm_seconds
+            )
+            return FaultResult(fault, "injected",
+                               f"Started {n} concurrent SERIALIZABLE reservation workers — "
+                               "each low-stock check scans the whole inventory table, so "
+                               "reservations conflict and Postgres aborts them (40001).")
+        if fault == "reservation_index":
+            created = await self._f.create_reservation_index()
+            return FaultResult(fault, "fixed",
+                               "Created ix_inventory_quantity CONCURRENTLY — the low-stock "
+                               "check now uses the index, so its predicate lock covers a "
+                               "few index pages instead of the whole table."
+                               if created else "ix_inventory_quantity already exists.")
         raise ValueError(f"unknown fault: {fault}")
+
+    async def reservation_stats(self):
+        return await self._f.reservation_stats()
 
     async def heal(self) -> list[FaultResult]:
         """Reverse every fault. Safe to call when nothing is broken — each
@@ -86,5 +113,12 @@ class ChaosService:
         await self._f.reclaim_bloat()
         results.append(FaultResult("bloat", "healed",
                                    "Autovacuum on + VACUUM ANALYZE reclaimed bloat."))
+
+        stats = await self._f.stop_reservation_storm()
+        await self._f.drop_reservation_index()
+        results.append(FaultResult("reservation_storm", "healed",
+                                   f"Stopped reservation workers ({stats.commits:,} committed, "
+                                   f"{stats.serialization_failures:,} serialization failures); "
+                                   "dropped ix_inventory_quantity."))
 
         return results

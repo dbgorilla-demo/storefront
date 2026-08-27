@@ -129,6 +129,11 @@
       <div class="card"><div class="label">Throughput (this node)</div><div class="value" id="traffic">–</div></div>
       <div class="card"><div class="label">Order-history index</div><div class="value" id="hotindex">–</div></div>
     </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr 1fr;">
+      <div class="card"><div class="label">Reservations attempted</div><div class="value" id="rsv-attempts">–</div></div>
+      <div class="card"><div class="label">Serialization failures (40001)</div><div class="value" id="rsv-failures">–</div></div>
+      <div class="card"><div class="label">Low-stock index</div><div class="value" id="rsv-index">–</div></div>
+    </div>
 
     <h2>Connections by state</h2>
     <div class="card"><div id="connbars" class="connbars"><div class="empty">loading…</div></div></div>
@@ -151,6 +156,12 @@
       <button class="act danger" data-fault="bloat">
         <span class="bt">Disable autovacuum + churn</span>
         <span class="bd">Rapid insert/delete on page_views with autovacuum off.</span></button>
+      <button class="act danger" data-fault="reservation_storm">
+        <span class="bt">Run inventory reservations</span>
+        <span class="bd">Concurrent SERIALIZABLE reservations; conflicts abort with 40001 and retry.</span></button>
+      <button class="act" data-fault="reservation_index">
+        <span class="bt">Index the low-stock check</span>
+        <span class="bd">CREATE INDEX CONCURRENTLY on inventory(quantity_available).</span></button>
       <button class="act heal" data-heal="1"><span class="bt">Restore normal operation</span></button>
     </div>
 
@@ -230,6 +241,19 @@ async function refreshHealth() {
     $("traffic").innerHTML = h.traffic_ok + " <small>ok / " + h.traffic_errors + " err</small>";
   } catch (e) {}
 }
+async function refreshReservations() {
+  try {
+    const r = await (await fetch("/api/reservations")).json();
+    const pct = r.attempts ? Math.round(100 * r.serialization_failures / r.attempts) : 0;
+    document.getElementById("rsv-attempts").textContent =
+      r.attempts.toLocaleString() + (r.running ? " (" + r.workers + " workers)" : "");
+    const f = document.getElementById("rsv-failures");
+    f.textContent = r.serialization_failures.toLocaleString() + (r.attempts ? " · " + pct + "%" : "");
+    f.style.color = pct > 20 ? "var(--crit)" : (pct > 5 ? "var(--warn)" : "");
+    document.getElementById("rsv-index").textContent = r.index_present ? "present" : "missing";
+  } catch (e) {}
+}
+
 async function refreshActivity() {
   try {
     const d = await (await fetch("/api/activity")).json();
@@ -338,7 +362,7 @@ async function enableFeature(id) {
 function poll() {
   refreshHealth();
   if (activeTab === "storefront") refreshFeatures();
-  if (activeTab === "dashboard") refreshConnections();
+  if (activeTab === "dashboard") { refreshConnections(); refreshReservations(); }
   if (activeTab === "queries") refreshActivity();
   if (activeTab === "workload") refreshWorkload();
   if (activeTab === "alerts") refreshAlerts();
