@@ -5,5 +5,5 @@ description: >-
   naive query features, a mis-tuned Postgres, and buttons to inject real faults.
   Its whole purpose is to give DBGorilla something worth diagnosing.
 type: application
-version: 0.6.2
-appVersion: "0.6.2"
+version: 0.6.3
+appVersion: "0.6.3"
