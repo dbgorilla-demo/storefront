@@ -347,3 +347,30 @@ class PostgresStorefrontRepository:
             category_name=row[4],
             quantity_available=row[5],
         )
+
+
+    async def customers_with_orders(self, limit: int) -> list[dict]:
+        """The customer directory: each recent customer with their orders."""
+        out: list[dict] = []
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT customer_id, email, full_name FROM storefront.customers "
+                "ORDER BY created_at DESC LIMIT %s",
+                (limit,),
+            )
+            customers = await cur.fetchall()
+            for customer_id, email, full_name in customers:
+                cur = await conn.execute(
+                    "SELECT order_id, status, total_cents, placed_at "
+                    "FROM storefront.orders WHERE customer_id = %s "
+                    "ORDER BY placed_at DESC",
+                    (customer_id,),
+                )
+                orders = [
+                    {"order_id": o[0], "status": o[1], "total_cents": o[2],
+                     "placed_at": o[3].isoformat()}
+                    for o in await cur.fetchall()
+                ]
+                out.append({"customer_id": customer_id, "email": email,
+                            "full_name": full_name, "orders": orders})
+        return out
