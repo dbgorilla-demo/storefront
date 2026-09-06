@@ -129,6 +129,12 @@ async def api_reservations() -> JSONResponse:
     return JSONResponse(stats.__dict__)
 
 
+@app.get("/api/customers-with-orders")
+async def api_customers_with_orders(limit: int = 500) -> JSONResponse:
+    repo = app.state.traffic._store
+    return JSONResponse({"customers": await repo.customers_with_orders(limit)})
+
+
 @app.get("/api/activity")
 async def api_activity() -> JSONResponse:
     sessions = await app.state.diagnostics.live_sessions()
