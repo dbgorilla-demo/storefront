@@ -18,7 +18,6 @@ class TrafficService:
     # Weighted mix of a realistic day at the storefront. Most of it is healthy
     # traffic across the features a real storefront accumulates: search,
     # analytics, the fulfilment queue, and the marketing and ops reports.
-    # under deadline.
     _MIX = (
         ("browse", 28),
         ("view_product", 18),

@@ -25,7 +25,7 @@ class HealthView:
 @dataclass
 class FaultResult:
     fault: str
-    action: str  # "injected" | "healed"
+    action: str  # "injected" | "fixed" | "healed"
     detail: str
 
 
