@@ -273,9 +273,9 @@ class PostgresStorefrontRepository:
                 """
                 SELECT count(*) FROM storefront.customers c
                  WHERE c.created_at > now() - make_interval(days => %s)
-                   AND c.customer_id NOT IN (
-                       SELECT customer_id FROM storefront.orders
-                        WHERE status = 'shipped')
+                   AND NOT EXISTS (
+                       SELECT 1 FROM storefront.orders o
+                        WHERE o.customer_id = c.customer_id AND o.status = 'shipped')
                 """,
                 (days,),
             )
