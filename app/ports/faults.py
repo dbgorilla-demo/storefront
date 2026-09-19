@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from app.repositories.models import ReservationStats
+
 
 class FaultInjectionPort(Protocol):
     # --- missing index: the hot lookup path loses its index and falls to a seq scan
@@ -37,3 +39,18 @@ class FaultInjectionPort(Protocol):
     async def churn_rows(self, batches: int, rows_per_batch: int) -> int: ...
 
     async def reclaim_bloat(self) -> None: ...
+
+    # --- reservations at load: concurrent checkout reservations, each in the
+    #     SERIALIZABLE transaction the reservation requires
+    async def start_reservation_storm(
+        self, workers: int, hot_products: int, hold_seconds: int
+    ) -> int: ...
+
+    async def stop_reservation_storm(self) -> ReservationStats: ...
+
+    async def reservation_stats(self) -> ReservationStats: ...
+
+    # index for the deep-stock guard the reservation reads
+    async def create_reservation_index(self) -> bool: ...
+
+    async def drop_reservation_index(self) -> bool: ...

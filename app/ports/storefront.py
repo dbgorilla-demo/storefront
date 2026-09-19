@@ -63,7 +63,6 @@ class StorefrontRepository(Protocol):
         """Ops audit: products low on stock or flagged for review."""
         ...
 
-    # --- stored procedures the app calls in normal operation. They work but are
     # --- stored procedures the app calls in normal operation.
 
     async def customer_lifetime_value(self, customer_id: int) -> int:

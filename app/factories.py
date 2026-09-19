@@ -84,4 +84,7 @@ def create_chaos_service(
         runaway_count=settings.runaway_count,
         churn_batches=settings.churn_batches,
         churn_rows=settings.churn_rows,
+        storm_workers=settings.storm_workers,
+        storm_hot_products=settings.storm_hot_products,
+        storm_seconds=settings.storm_seconds,
     )

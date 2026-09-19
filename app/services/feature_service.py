@@ -75,6 +75,12 @@ FEATURES: list[Feature] = [
         "chaos", "missing_index",
     ),
     Feature(
+        "reservations", "Inventory Reservations", "\U0001F9FE",
+        "Reserve stock at checkout so two customers never buy the last unit.",
+        "SERIALIZABLE conflicts → retry storm (SQLSTATE 40001)",
+        "chaos", "reservation_storm",
+    ),
+    Feature(
         "clickstream", "Clickstream Analytics", "\U0001F4C8",
         "Track every page view for product insights.",
         "Table bloat — dead tuples pile up",

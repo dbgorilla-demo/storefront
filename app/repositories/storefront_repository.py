@@ -198,7 +198,7 @@ class PostgresStorefrontRepository:
     async def customer_order_history(
         self, customer_id: int, limit: int
     ) -> list[OrderReceipt]:
-        # Rides ix_orders_customer. Without that index this same
+        # Customer order-history lookups; rides ix_orders_customer.
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 "SELECT order_id, customer_id, status, total_cents, placed_at "

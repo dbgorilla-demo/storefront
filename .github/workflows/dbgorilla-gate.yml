@@ -1,0 +1,45 @@
+name: DBGorilla gate
+
+# The database reviewer (the DBGorilla GitHub App) posts an advisory commit
+# status on every pull request: `dbgorilla-review`, success with description
+# "pass" or "concerns". This job turns that verdict into a required check so a
+# PR with database concerns cannot merge until the concerns are resolved and
+# the reviewer re-runs.
+
+on:
+  pull_request:
+  # Re-runnable from the Checks tab after the reviewer updates its verdict.
+  workflow_dispatch:
+
+permissions:
+  statuses: read
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the DBGorilla verdict and enforce it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do   # up to 15 minutes; a review takes ~9
+            line=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/status" \
+                   -q '.statuses[] | select(.context=="dbgorilla-review") | "\(.state) \(.description)"' | head -1)
+            state=${line%% *}; desc=${line#* }
+            case "$state" in
+              "")        echo "waiting for the reviewer to pick this up…" ;;
+              pending)   echo "reviewing…" ;;
+              success)
+                if [ "$desc" = "pass" ]; then echo "DBGorilla: pass"; exit 0
+                else echo "::error::DBGorilla found database concerns on this PR — see its review comment. Resolve them; the reviewer re-runs on push."; exit 1; fi ;;
+              failure|error)
+                echo "::error::DBGorilla review failed: $desc"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          # No status at all: the reviewer stays silent on PRs with no database
+          # surface (docs, CI, frontend-only). Out of scope is not a failure.
+          echo "no DBGorilla verdict — no database surface in this PR"; exit 0

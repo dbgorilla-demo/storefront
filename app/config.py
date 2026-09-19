@@ -19,6 +19,9 @@ class Settings:
     runaway_count: int
     churn_batches: int
     churn_rows: int
+    storm_workers: int
+    storm_hot_products: int
+    storm_seconds: int
     alert_active_connections: int
 
 
@@ -39,5 +42,8 @@ def load_settings() -> Settings:
         runaway_count=int(os.environ.get("CHAOS_RUNAWAY_COUNT", "4")),
         churn_batches=int(os.environ.get("CHAOS_CHURN_BATCHES", "40")),
         churn_rows=int(os.environ.get("CHAOS_CHURN_ROWS", "5000")),
+        storm_workers=int(os.environ.get("CHAOS_STORM_WORKERS", "8")),
+        storm_hot_products=int(os.environ.get("CHAOS_STORM_HOT_PRODUCTS", "50")),
+        storm_seconds=int(os.environ.get("CHAOS_STORM_SECONDS", "600")),
         alert_active_connections=int(os.environ.get("ALERT_ACTIVE_CONNECTIONS", "130")),
     )

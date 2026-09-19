@@ -61,6 +61,21 @@ class WorkloadSample:
 
 
 @dataclass(frozen=True)
+class ReservationStats:
+    """Live counters for the reservation flow: transactions attempted, committed,
+    and refused by Postgres with a serialization failure (SQLSTATE 40001) and
+    retried."""
+
+    running: bool
+    workers: int
+    attempts: int
+    commits: int
+    serialization_failures: int
+    elapsed_seconds: float
+    index_present: bool
+
+
+@dataclass(frozen=True)
 class BlockedSession:
     blocked_pid: int
     blocked_query: str
