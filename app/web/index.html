@@ -14,16 +14,24 @@
   body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
          background: var(--bg); color: var(--ink); }
   header { padding: 20px 28px; border-bottom: 1px solid var(--edge);
-           display: flex; align-items: center; justify-content: space-between; }
+           display: flex; align-items: center; justify-content: space-between;
+           gap: 12px; flex-wrap: wrap; }
   header h1 { font-size: 18px; margin: 0; font-weight: 600; }
   header .sub { color: var(--muted); font-size: 13px; }
-  nav { display: flex; gap: 4px; padding: 0 28px; border-bottom: 1px solid var(--edge); background: #14171e; }
+  /* Tabs scroll rather than wrap: a wrapped nav changes height and shoves the
+     whole page down while people are watching it, which reads as a glitch. */
+  nav { display: flex; gap: 4px; padding: 0 28px; border-bottom: 1px solid var(--edge); background: #14171e;
+        overflow-x: auto; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
   nav button { font: inherit; background: none; border: none; color: var(--muted); padding: 12px 16px;
-               cursor: pointer; border-bottom: 2px solid transparent; }
+               cursor: pointer; border-bottom: 2px solid transparent; flex: 0 0 auto; white-space: nowrap; }
   nav button.active { color: var(--ink); border-bottom-color: var(--accent); }
   main { max-width: 1000px; margin: 0 auto; padding: 24px 28px 60px; }
   .tab { display: none; } .tab.active { display: block; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 8px; }
+  /* auto-fit + minmax means the column count follows the actual width, so these
+     reflow correctly at any size instead of only at the breakpoints we guessed. */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .grid.two { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
   .card { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 14px 16px; }
   .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .card .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
@@ -34,7 +42,7 @@
   .s-critical { background: var(--crit); box-shadow: 0 0 10px var(--crit); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .4; } }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 28px 0 12px; }
-  .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
   button.act { font: inherit; border: 1px solid var(--edge); background: #1f2430; color: var(--ink);
            padding: 12px 14px; border-radius: 8px; cursor: pointer; text-align: left; transition: .12s; }
   button.act:hover { border-color: var(--accent); }
@@ -50,7 +58,10 @@
          font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
          height: 130px; overflow-y: auto; color: var(--muted); }
   #log div { padding: 1px 0; } #log .inj { color: var(--warn); } #log .heal { color: var(--ok); }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  /* Six-column tables can't usefully collapse, so they scroll inside their own
+     box. Without this the whole page scrolls sideways and the nav goes with it. */
+  .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
   th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase;
        letter-spacing: .04em; padding: 8px 10px; border-bottom: 1px solid var(--edge); }
   td { padding: 8px 10px; border-bottom: 1px solid #1e222b; vertical-align: top; }
@@ -64,7 +75,8 @@
   .b-normal { background: #1f2430; color: var(--muted); }
   .empty { color: var(--muted); padding: 24px 10px; text-align: center; }
   .connbars { display: flex; flex-direction: column; gap: 8px; }
-  .connrow { display: grid; grid-template-columns: 190px 1fr 48px; align-items: center; gap: 10px; }
+  .connrow { display: grid; grid-template-columns: minmax(0, 190px) 1fr 48px; align-items: center; gap: 10px; }
+  .connrow .st { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .connrow .st { color: var(--muted); font-size: 13px; }
   .connrow .track { background: #0b0d11; border-radius: 5px; height: 18px; overflow: hidden; }
   .connrow .fill { height: 100%; border-radius: 5px; transition: width .4s ease; }
@@ -73,7 +85,7 @@
   .f-iit { background: var(--crit); }        /* idle in transaction — the dangerous one */
   .f-idle { background: #3a4150; }
   .f-other { background: var(--warn); }
-  .feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
   .feature { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; }
   .feature .top { display: flex; align-items: center; gap: 12px; }
   .feature .ico { font-size: 26px; line-height: 1; }
@@ -82,6 +94,7 @@
   .feature .cause { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--crit);
     background: #241417; border: 1px solid #3a2226; border-radius: 20px; padding: 3px 10px; margin-bottom: 12px; align-self: flex-start; }
   .feature .cause::before { content: "\26A0"; }   /* warning triangle */
+  .feature-grid.pills-off .cause { visibility: hidden; }  /* keeps the layout, hides the reveal */
   .feature .ship { font: inherit; font-weight: 600; border: 1px solid var(--edge); background: #1f2430; color: var(--ink);
     padding: 9px 14px; border-radius: 8px; cursor: pointer; transition: .12s; }
   .feature .ship:hover { border-color: var(--accent); }
@@ -89,6 +102,27 @@
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 14px; }
   .foot { color: var(--muted); font-size: 12px; margin-top: 24px; }
   code { color: #cdd3dd; }
+
+  /* Narrow: reclaim the horizontal padding before anything has to shrink. */
+  @media (max-width: 700px) {
+    header { padding: 16px 18px; }
+    nav { padding: 0 12px; }
+    nav button { padding: 12px 12px; }
+    main { padding: 18px 18px 48px; }
+    h2 { margin: 22px 0 10px; }
+    td.sql { max-width: 320px; }
+    #log { height: 150px; }
+  }
+  @media (max-width: 460px) {
+    header { padding: 14px 14px; }
+    header h1 { font-size: 16px; }
+    main { padding: 14px 14px 40px; }
+    .card .value { font-size: 19px; }
+    .feature { padding: 15px; }
+    /* The state label loses its own column and sits above its bar. */
+    .connrow { grid-template-columns: 1fr 48px; }
+    .connrow .st { grid-column: 1 / -1; }
+  }
 </style>
 </head>
 <body>
@@ -111,7 +145,8 @@
   <section class="tab active" id="tab-storefront">
     <div class="hint">Our storefront's feature roadmap. Ship a feature to see it go live —
        and watch what each one does to the database on the other tabs and in DBGorilla.
-       <button class="act" style="display:inline-block;padding:4px 10px" id="restorefeatures">Roll back all features</button></div>
+       <button class="act" style="display:inline-block;padding:4px 10px" id="restorefeatures">Roll back all features</button>
+       <button class="act" style="display:inline-block;padding:4px 10px" id="togglepills">Show consequences</button></div>
     <div id="feature-grid" class="feature-grid"><div class="empty">loading…</div></div>
   </section>
 
@@ -125,7 +160,7 @@
       <div class="card"><div class="label">Dead tuples</div><div class="value" id="dead">–</div></div>
       <div class="card"><div class="label">Database size</div><div class="value" id="size">–</div></div>
     </div>
-    <div class="grid" style="grid-template-columns:1fr 1fr;">
+    <div class="grid two">
       <div class="card"><div class="label">Throughput (this node)</div><div class="value" id="traffic">–</div></div>
       <div class="card"><div class="label">Order-history index</div><div class="value" id="hotindex">–</div></div>
     </div>
@@ -173,20 +208,20 @@
   <section class="tab" id="tab-queries">
     <div class="hint">Backends currently executing a statement or holding a transaction open
        (<code>pg_stat_activity</code>). Refreshes every 2s.</div>
-    <table>
+    <div class="tablewrap"><table>
       <thead><tr><th>PID</th><th>State</th><th class="num">Duration</th><th>Wait</th><th>Query</th><th>Flag</th></tr></thead>
       <tbody id="activity-body"><tr><td colspan="6" class="empty">loading…</td></tr></tbody>
-    </table>
+    </table></div>
   </section>
 
   <!-- WORKLOAD -->
   <section class="tab" id="tab-workload">
     <div class="hint">Storefront queries ranked by total execution time since stats were last reset
        (<code>pg_stat_statements</code>). Flagged rows exhibit a known anti-pattern.</div>
-    <table>
+    <div class="tablewrap"><table>
       <thead><tr><th>Query</th><th class="num">Calls</th><th class="num">Total ms</th><th class="num">Mean ms</th><th class="num">Rows</th><th>Flag</th></tr></thead>
       <tbody id="workload-body"><tr><td colspan="6" class="empty">loading…</td></tr></tbody>
-    </table>
+    </table></div>
   </section>
 
   <!-- ALERTS -->
@@ -194,10 +229,10 @@
     <div class="hint">DBGorilla's default per-database alerts. Trigger one to drive its
        metric across the threshold; alerts have a 1-minute pending window, so give it
        ~2 minutes to fire in DBGorilla. <button class="act" style="display:inline-block;padding:4px 10px" id="stopalerts">Stop all campaigns</button></div>
-    <table>
+    <div class="tablewrap"><table>
       <thead><tr><th>Alert</th><th>Severity</th><th>Condition</th><th>Status</th><th></th></tr></thead>
       <tbody id="alerts-body"><tr><td colspan="5" class="empty">loading…</td></tr></tbody>
-    </table>
+    </table></div>
     <h2>Platform alerts (not app-triggerable)</h2>
     <div class="hint">These default alerts match DBGorilla backend log patterns, not database
        metrics — they can't be induced from this app. Listed for completeness.</div>
@@ -243,7 +278,9 @@ async function refreshHealth() {
 }
 async function refreshReservations() {
   try {
-    const r = await (await fetch("/api/reservations")).json();
+    const response = await fetch("/api/reservations");
+    if (!response.ok) throw new Error("reservation stats request failed");
+    const r = await response.json();
     const pct = r.attempts ? Math.round(100 * r.serialization_failures / r.attempts) : 0;
     document.getElementById("rsv-attempts").textContent =
       r.attempts.toLocaleString() + (r.running ? " (" + r.workers + " workers)" : "");
@@ -251,7 +288,15 @@ async function refreshReservations() {
     f.textContent = r.serialization_failures.toLocaleString() + (r.attempts ? " · " + pct + "%" : "");
     f.style.color = pct > 20 ? "var(--crit)" : (pct > 5 ? "var(--warn)" : "");
     document.getElementById("rsv-index").textContent = r.index_present ? "present" : "missing";
-  } catch (e) {}
+  } catch (e) {
+    // Blank the panel rather than leaving the last good numbers on screen. On a
+    // healthy index reads as "the fix worked" when the endpoint is simply down.
+    document.getElementById("rsv-attempts").textContent = "unavailable";
+    const f = document.getElementById("rsv-failures");
+    f.textContent = "unavailable";
+    f.style.color = "";
+    document.getElementById("rsv-index").textContent = "unavailable";
+  }
 }
 
 async function refreshActivity() {
@@ -335,6 +380,18 @@ async function triggerAlert(id) {
   } catch (e) { logLine("alert trigger failed: " + e, "inj"); }
   refreshAlerts();
 }
+let pillsOn = localStorage.getItem("dbg.pills") === "1";
+function applyPills() {
+  const g = $("feature-grid"), b = $("togglepills");
+  if (!g || !b) return;
+  g.classList.toggle("pills-off", !pillsOn);
+  b.textContent = pillsOn ? "Hide consequences" : "Show consequences";
+}
+function togglePills() {
+  pillsOn = !pillsOn;
+  try { localStorage.setItem("dbg.pills", pillsOn ? "1" : "0"); } catch (e) {}
+  applyPills();
+}
 async function refreshFeatures() {
   try {
     const d = await (await fetch("/api/features")).json();
@@ -350,6 +407,7 @@ async function refreshFeatures() {
     }).join("");
     g.querySelectorAll("button[data-feature]").forEach(x =>
       x.addEventListener("click", () => enableFeature(x.dataset.feature)));
+    applyPills();
   } catch (e) {}
 }
 async function enableFeature(id) {
@@ -372,7 +430,10 @@ async function fire(url) {
   document.querySelectorAll("button.act").forEach(b => b.disabled = true);
   try {
     const data = await (await fetch(url, { method: "POST" })).json();
-    (data.results || [data]).forEach(x => logLine(x.fault + ": " + x.detail, x.action === "healed" ? "heal" : "inj"));
+    // "fixed" is a remediation, not a fault -- render it green like "healed".
+    // Anything unrecognised stays amber: an unknown action is not good news.
+    (data.results || [data]).forEach(x => logLine(x.fault + ": " + x.detail,
+      (x.action === "healed" || x.action === "fixed") ? "heal" : "inj"));
   } catch (e) { logLine("request failed: " + e, "inj"); }
   finally { document.querySelectorAll("button.act").forEach(b => b.disabled = false); poll(); }
 }
@@ -383,6 +444,7 @@ $("stopalerts").addEventListener("click", async () => {
   await fetch("/api/alerts-stop", { method: "POST" });
   logLine("alert campaigns stopped", "heal"); refreshAlerts();
 });
+$("togglepills").addEventListener("click", togglePills);
 $("restorefeatures").addEventListener("click", async () => {
   await fetch("/api/features-restore", { method: "POST" });
   logLine("all features rolled back — database restored", "heal"); refreshFeatures();
