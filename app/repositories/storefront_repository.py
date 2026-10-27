@@ -236,6 +236,17 @@ class PostgresStorefrontRepository:
                 for r in await cur.fetchall()
             ]
 
+    async def orders_on_day(self, day: str, limit: int) -> list[int]:
+        """Order ids placed on one calendar day, for the support console."""
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT order_id FROM storefront.orders "
+                "WHERE placed_at::date = %s::date "
+                "ORDER BY placed_at DESC LIMIT %s",
+                (day, limit),
+            )
+            return [r[0] for r in await cur.fetchall()]
+
     async def recent_order_ids(self, days: int, limit: int) -> list[int]:
         async with self._pool.connection() as conn:
             cur = await conn.execute(
