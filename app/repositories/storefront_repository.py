@@ -195,6 +195,15 @@ class PostgresStorefrontRepository:
             lines=lines,
         )
 
+    async def order_id_for_tracking(self, tracking_id: str) -> int | None:
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT order_id FROM storefront.orders WHERE tracking_id = %s",
+                (tracking_id,),
+            )
+            row = await cur.fetchone()
+            return row[0] if row else None
+
     async def customer_order_history(
         self, customer_id: int, limit: int
     ) -> list[OrderReceipt]:
