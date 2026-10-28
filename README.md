@@ -52,3 +52,7 @@ Deploys go through the platform pipeline: merge to `main`, the pipeline runs
 `helm upgrade` with `./chart`. Migrations run as a Helm
 `post-install`/`post-upgrade` Job (`alembic upgrade head`). Postgres parameters
 are code — see `chart/values.yaml → cluster.postgresParameters`.
+
+For DBGorilla #13's customer anti-join rewrite, deploy the concurrent indexes
+**before** the application rollout; the post-upgrade hook alone does not ensure
+that ordering. See [deployment, verification and rollback instructions](docs/recommendation-13.md).

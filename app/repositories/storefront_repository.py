@@ -266,16 +266,17 @@ class PostgresStorefrontRepository:
             ]
 
     async def awaiting_shipment_count(self, days: int) -> int:
-        # Customers who have ordered but never had an order ship -- a
-        # fulfilment health check for the ops dashboard.
+        # Recent customers with no shipped order, including those with no
+        # orders at all -- a fulfilment health check for the ops dashboard.
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 """
                 SELECT count(*) FROM storefront.customers c
                  WHERE c.created_at > now() - make_interval(days => %s)
-                   AND c.customer_id NOT IN (
-                       SELECT customer_id FROM storefront.orders
-                        WHERE status = 'shipped')
+                   AND NOT EXISTS (
+                       SELECT 1 FROM storefront.orders o
+                        WHERE o.customer_id = c.customer_id
+                          AND o.status = 'shipped')
                 """,
                 (days,),
             )
