@@ -52,3 +52,12 @@ Deploys go through the platform pipeline: merge to `main`, the pipeline runs
 `helm upgrade` with `./chart`. Migrations run as a Helm
 `post-install`/`post-upgrade` Job (`alembic upgrade head`). Postgres parameters
 are code — see `chart/values.yaml → cluster.postgresParameters`.
+
+Database passwords are not code. The chart generates random ones on first
+install and keeps the live Secrets' values on every upgrade. To rotate, change
+the password in the live Secret (`storefront-pg-app` or `storefront-pg-collector`)
+and in PostgreSQL (`ALTER ROLE ... PASSWORD`), then restart the app, the
+exporter and any collector that reads them. Do not rotate through
+`--set credentials.*Password`: Helm keeps release values, and a later upgrade
+with `--reuse-values` would put the old value back. Nothing in this repository
+should ever contain a real credential.
