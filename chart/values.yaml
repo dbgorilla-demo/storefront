@@ -44,9 +44,10 @@ cluster:
 
 # Database role passwords. Leave both empty. On first install the chart
 # generates random ones; on every upgrade it keeps whatever the live Secrets
-# already hold. Set a value only to force a rotation
-# (`--set credentials.appPassword=...`), never commit one here: this file is
-# public.
+# already hold. Rotate by editing the live Secret and the role in PostgreSQL,
+# not through these values: Helm remembers release values, so a value set here
+# or with --set would silently undo a later rotation. Never commit one: this
+# file is public.
 credentials:
   appPassword: ""
   collectorPassword: ""
