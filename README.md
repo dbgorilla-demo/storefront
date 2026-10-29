@@ -52,3 +52,9 @@ Deploys go through the platform pipeline: merge to `main`, the pipeline runs
 `helm upgrade` with `./chart`. Migrations run as a Helm
 `post-install`/`post-upgrade` Job (`alembic upgrade head`). Postgres parameters
 are code — see `chart/values.yaml → cluster.postgresParameters`.
+
+Database passwords are not code. The chart generates random ones on first
+install and keeps the live Secrets' values on every upgrade. To rotate, pass
+`--set credentials.appPassword=...` once (and the same for `collectorPassword`),
+then restart the app, exporter and any collector that reads them. Nothing in
+this repository should ever contain a real credential.

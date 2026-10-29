@@ -42,10 +42,14 @@ cluster:
     pg_stat_statements.max: "10000"
     pg_stat_statements.track: "all"
 
-# Application role credentials; managed by the platform team.
+# Database role passwords. Leave both empty. On first install the chart
+# generates random ones; on every upgrade it keeps whatever the live Secrets
+# already hold. Set a value only to force a rotation
+# (`--set credentials.appPassword=...`), never commit one here: this file is
+# public.
 credentials:
-  appPassword: storefront
-  collectorPassword: storefront
+  appPassword: ""
+  collectorPassword: ""
 
 app:
   # Toggle the web app + migration Job independently of the database, so the
